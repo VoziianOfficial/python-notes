@@ -90,6 +90,7 @@ def get_user(user_id: int):
 @app.post("/users", status_code=201)
 def create_user(user_data: UserCreate):
     with Session(engine) as session:
+        
         user = User(name=user_data.name, age=user_data.age)
 
         session.add(user)
