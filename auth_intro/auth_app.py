@@ -25,16 +25,18 @@ fake_user = {
     "id": 5,
     "email": "anna@example.com",
     "hashed_password": password_hash.hash("123456"),
+    "role": "admin",
 }
 
 
 # Создаём JWT
-def create_access_token(user_id: int):
+def create_access_token(user_id: int, role: str):
     expire = datetime.now(timezone.utc) + timedelta(minutes=30)
 
     data = {
         "sub": str(user_id),
         "exp": expire,
+        "role": role
     }
 
     token = jwt.encode(data, SECRET_KEY, algorithm=ALGORITHM)
@@ -56,7 +58,7 @@ def login(login_data: LoginData):
     if not password_is_correct:
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
-    token = create_access_token(fake_user["id"])
+    token = create_access_token(fake_user["id"], fake_user["role"])
 
     return {"access_token": token, "token_type": "bearer"}
 
@@ -83,3 +85,25 @@ def get_current_user_id(credentials: HTTPAuthorizationCredentials = Depends(secu
 @app.get("/profile")
 def get_profile(user_id: int = Depends(get_current_user_id)):
     return {"user_id": user_id, "message": "You are authenticated"}
+
+
+def require_admin(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    token = credentials.credentials
+
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+
+        role = payload.get("role")
+
+        if role != "admin":
+            raise HTTPException(status_code=403, detail="Admin access required")
+
+        return True
+
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+
+
+@app.get("/admin")
+def admin_panel(is_admin: bool = Depends(require_admin)):
+    return {"message": "Welcome to admin panel"}
