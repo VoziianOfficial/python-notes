@@ -2,15 +2,14 @@ from fastapi import FastAPI, HTTPException
 from database import engine, Base
 from models import Task, User
 from sqlalchemy.orm import Session
-from schemas import UserCreate
-from auth import hash_password
+from schemas import UserCreate, LoginData, TaskCreate, TaskUpdate
+from auth import hash_password, verify_password, create_access_token
 from sqlalchemy import select
 
 app = FastAPI()
 
 
 Base.metadata.create_all(engine)
-
 
 
 @app.post("/register")
@@ -39,3 +38,25 @@ def register_user(user_data: UserCreate):
         }
 
 
+@app.post("/login")
+def login_user(login_data: LoginData):
+    with Session(engine) as session:
+        statement = select(User).where(User.email == login_data.email)
+        user = session.scalar(statement)
+
+        if user is None:
+            raise HTTPException(status_code=401, detail="Invalid email or password")
+
+        password_is_correct = verify_password(
+            login_data.password,
+            user.hashed_password
+        )
+        if password_is_correct is False:
+            raise HTTPException(status_code=401, detail="Invalid email or password")
+
+        token = create_access_token(user.id, user.role)
+
+        return {
+            "access_token": token,
+            "token_type": "bearer"
+        }
