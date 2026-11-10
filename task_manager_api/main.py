@@ -1,12 +1,19 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Depends
 from database import engine, Base
 from models import Task, User
 from sqlalchemy.orm import Session
 from schemas import UserCreate, LoginData, TaskCreate, TaskUpdate
-from auth import hash_password, verify_password, create_access_token
+from auth import (
+    hash_password,
+    verify_password,
+    create_access_token,
+    decode_access_token,
+)
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
 
 app = FastAPI()
+security = HTTPBearer()
 
 
 Base.metadata.create_all(engine)
@@ -60,3 +67,43 @@ def login_user(login_data: LoginData):
             "access_token": token,
             "token_type": "bearer"
         }
+
+
+def get_current_user(
+        credentials: HTTPAuthorizationCredentials = Depends(security)):
+    token = credentials.credentials
+    payload = decode_access_token(token)
+    if payload is None:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid or expired token"
+    )
+
+    user_id = payload.get("sub")
+    if user_id is None:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid token"
+        )
+    user_id = int(user_id)
+
+    with Session(engine) as session:
+        statement = select(User).where(User.id == user_id)
+        user = session.scalar(statement)
+
+        if user is None:
+            raise HTTPException(
+                status_code=401,
+                detail="User not found"
+            )
+
+        return user
+
+
+@app.get("/profile")
+def get_profile(current_user:User = Depends(get_current_user)):
+   return {
+       "id": current_user.id,
+       "email": current_user.email,
+       "role": current_user.role
+   }
