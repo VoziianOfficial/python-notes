@@ -19,3 +19,16 @@ class TaskCreate(BaseModel):
 class TaskUpdate(BaseModel):
     title: str | None = None
     completed: bool | None = None
+
+
+class UserResponse(BaseModel):
+    id: int
+    email: str
+    role: str
+
+
+class TaskResponse(BaseModel):
+    id: int
+    title: str
+    completed: bool
+    user_id: int

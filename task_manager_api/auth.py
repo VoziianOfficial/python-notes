@@ -1,10 +1,18 @@
 from pwdlib import PasswordHash
 import jwt
 from datetime import datetime, timedelta, timezone
+import os
+from dotenv import load_dotenv
+
+load_dotenv("task_manager_api/.env")
 
 password_hash = PasswordHash.recommended()
 
-SECRET_KEY = "0196bed1becf5a77c20120aebff9d971bbc6d54c91a020f42c50e10f30413ae2"
+SECRET_KEY = os.getenv("SECRET_KEY")
+
+if SECRET_KEY is None:
+    raise RuntimeError("SECRET_KEY is not set")
+
 ALGORITHM = "HS256"
 
 def hash_password(password: str) -> str:

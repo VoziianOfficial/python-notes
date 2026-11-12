@@ -1,8 +1,8 @@
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import FastAPI, HTTPException, Depends, Response
 from database import engine, Base
 from models import Task, User
 from sqlalchemy.orm import Session
-from schemas import UserCreate, LoginData, TaskCreate, TaskUpdate
+from schemas import UserCreate, LoginData, TaskCreate, TaskUpdate, UserResponse, TaskResponse
 from auth import (
     hash_password,
     verify_password,
@@ -12,6 +12,7 @@ from auth import (
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
 
+
 app = FastAPI()
 security = HTTPBearer()
 
@@ -19,24 +20,24 @@ security = HTTPBearer()
 Base.metadata.create_all(engine)
 
 
-@app.post("/register")
+@app.post("/register", response_model=UserResponse, status_code=201)
 def register_user(user_data: UserCreate):
     with Session(engine) as session:
-        statement = select(User).where(User.email == user_data.email)
-        existing_user = session.scalar(statement)
-        if existing_user is not None:
-            raise HTTPException(status_code=409, detail="Email already registered")
+        with session.begin():
+            statement = select(User).where(User.email == user_data.email)
+            existing_user = session.scalar(statement)
+            if existing_user is not None:
+                raise HTTPException(status_code=409, detail="Email already registered")
 
-        hashed_password = hash_password(user_data.password)
+            hashed_password = hash_password(user_data.password)
 
-        new_user = User(
-            email = user_data.email,
-            hashed_password = hashed_password,
-            role = 'user'
-        )
+            new_user = User(
+                email = user_data.email,
+                hashed_password = hashed_password,
+                role = 'user'
+            )
 
-        session.add(new_user)
-        session.commit()
+            session.add(new_user)
 
         return {
             "id": new_user.id,
@@ -100,16 +101,16 @@ def get_current_user(
         return user
 
 
-@app.get("/profile")
+@app.get("/profile", response_model=UserResponse)
 def get_profile(current_user:User = Depends(get_current_user)):
-   return {
+    return {
        "id": current_user.id,
        "email": current_user.email,
        "role": current_user.role
    }
 
 
-@app.post("/tasks")
+@app.post("/tasks", response_model=TaskResponse, status_code=201)
 def create_task(task_data: TaskCreate,
     current_user: User = Depends(get_current_user)):
     with Session(engine) as session:
@@ -130,7 +131,7 @@ def create_task(task_data: TaskCreate,
         }
 
 
-@app.get("/tasks")
+@app.get("/tasks", response_model=list[TaskResponse])
 def get_tasks(current_user: User = Depends(get_current_user)):
     with Session(engine) as session:
         statement = select(Task).where(Task.user_id == current_user.id)
@@ -139,7 +140,7 @@ def get_tasks(current_user: User = Depends(get_current_user)):
         return user_tasks
 
 
-@app.get("/tasks/{task_id}")
+@app.get("/tasks/{task_id}", response_model=TaskResponse)
 def get_task(task_id: int, current_user: User = Depends(get_current_user)):
     with Session(engine) as session:
         statement = select(Task).where(Task.id == task_id, Task.user_id == current_user.id)
@@ -150,7 +151,7 @@ def get_task(task_id: int, current_user: User = Depends(get_current_user)):
         return task
 
 
-@app.patch("/tasks/{task_id}")
+@app.patch("/tasks/{task_id}", response_model=TaskResponse)
 def update_task(task_id: int, task_data: TaskUpdate, current_user: User = Depends(get_current_user)):
     with Session(engine) as session:
         statement = select(Task).where(Task.id == task_id, Task.user_id == current_user.id)
@@ -169,7 +170,7 @@ def update_task(task_id: int, task_data: TaskUpdate, current_user: User = Depend
         return task
 
 
-@app.delete("/tasks/{task_id}")
+@app.delete("/tasks/{task_id}", status_code=204)
 def delete_task(task_id: int, current_user: User = Depends(get_current_user)):
     with Session(engine) as session:
         statement = select(Task).where(Task.id == task_id, Task.user_id == current_user.id)
@@ -180,7 +181,8 @@ def delete_task(task_id: int, current_user: User = Depends(get_current_user)):
         session.delete(task)
         session.commit()
 
-        return {"detail": "Task deleted successfully"}
+        return Response(status_code=204)
+
 
 
 def require_admin(current_user: User = Depends(get_current_user)):
@@ -192,8 +194,7 @@ def require_admin(current_user: User = Depends(get_current_user)):
     return current_user
 
 
-
-@app.get("/admin/users")
+@app.get("/admin/users", response_model=list[UserResponse])
 def get_all_users(admin: User = Depends(require_admin)):
     with Session(engine) as session:
         statement = select(User)
