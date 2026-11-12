@@ -150,7 +150,6 @@ def get_task(task_id: int, current_user: User = Depends(get_current_user)):
         return task
 
 
-
 @app.patch("/tasks/{task_id}")
 def update_task(task_id: int, task_data: TaskUpdate, current_user: User = Depends(get_current_user)):
     with Session(engine) as session:
@@ -182,3 +181,29 @@ def delete_task(task_id: int, current_user: User = Depends(get_current_user)):
         session.commit()
 
         return {"detail": "Task deleted successfully"}
+
+
+def require_admin(current_user: User = Depends(get_current_user)):
+    if current_user.role != "admin":
+        raise HTTPException(
+            status_code=403, 
+            detail="Admin access required"
+            )
+    return current_user
+
+
+
+@app.get("/admin/users")
+def get_all_users(admin: User = Depends(require_admin)):
+    with Session(engine) as session:
+        statement = select(User)
+        users = session.scalars(statement).all()
+
+        return [
+            {
+                "id": user.id,
+                "email": user.email,
+                "role": user.role
+            }
+            for user in users
+        ]
